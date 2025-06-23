@@ -1,41 +1,47 @@
-import { getAccessTokenFromCode, redirectToSpotifyAuth } from './auth.js';
-
-const moodGenres = {
-  happy: ['pop', 'dance', 'funk', 'party'],
-  sad: ['piano', 'acoustic', 'sad'],
-  angry: ['metal', 'rock', 'punk', 'phonk'],
-  chill: ['lofi', 'ambient', 'chill'],
-  love: ['rnb', 'romantic', 'soul', 'soft'],
-  hype: ['rap', 'hip hop', 'edm']
-};
-
-document.getElementById('login-btn').addEventListener('click', () => {
-  const mood = document.getElementById('mood').value;
-  localStorage.setItem('selectedMood', mood);
-  redirectToSpotifyAuth();
-});
+import { getAccessTokenFromCode } from './auth.js';
 
 window.onload = async () => {
   const accessToken = await getAccessTokenFromCode();
-  if (!accessToken) return;
+  if (!accessToken) {
+    console.log('[DEBUG] No access token retrieved.');
+    return;
+  }
 
-  document.getElementById('status').innerText = '🎧 Logged in! Creating your Burnlist...';
+  const statusElement = document.getElementById('status');
+  statusElement.innerText = '🎧 Logged in! Creating your mood-based playlist...';
 
-  const headers = { Authorization: `Bearer ${accessToken}` };
+  console.log('[DEBUG] Access token:', accessToken);
+
+  const headers = { Authorization: 'Bearer ' + accessToken };
   const mood = localStorage.getItem('selectedMood') || 'chill';
+  console.log('[DEBUG] Retrieved mood from localStorage:', mood);
 
   const user = await fetch('https://api.spotify.com/v1/me', { headers }).then(res => res.json());
+  console.log('[DEBUG] User info:', user);
   const userId = user.id;
 
   let allTracks = [];
   let offset = 0;
+
   while (true) {
     const res = await fetch(`https://api.spotify.com/v1/me/tracks?limit=50&offset=${offset}`, { headers });
     const data = await res.json();
+    console.log(`[DEBUG] Fetched ${data.items.length} tracks at offset ${offset}`);
     if (!data.items.length) break;
     allTracks.push(...data.items.map(item => item.track));
     offset += 50;
   }
+
+  console.log('[DEBUG] Total liked tracks:', allTracks.length);
+
+  const moodGenres = {
+    happy: ['pop', 'dance', 'funk', 'party'],
+    sad: ['piano', 'acoustic', 'sad'],
+    angry: ['metal', 'rock', 'punk','phonk'],
+    chill: ['lofi', 'ambient', 'chill'],
+    love: ['rnb', 'romantic', 'soul','soft'],
+    hype: ['rap', 'hip hop', 'edm']
+  };
 
   const selectedTracks = [];
 
@@ -44,17 +50,22 @@ window.onload = async () => {
     if (!artistId) continue;
 
     const artistRes = await fetch(`https://api.spotify.com/v1/artists/${artistId}`, { headers });
-    const artist = await artistRes.json();
+    const artistData = await artistRes.json();
+    const artistGenres = artistData.genres || [];
 
-    const genres = artist.genres || [];
-    const match = genres.some(g => moodGenres[mood].some(mg => g.includes(mg)));
+    const match = artistGenres.some(g => moodGenres[mood].some(mg => g.includes(mg)));
+    if (match) {
+      selectedTracks.push(track.uri);
+      console.log(`[DEBUG] Track matched for mood (${mood}):`, track.name);
+    }
 
-    if (match) selectedTracks.push(track.uri);
     if (selectedTracks.length >= 30) break;
   }
 
+  console.log('[DEBUG] Total tracks selected for playlist:', selectedTracks.length);
+
   if (!selectedTracks.length) {
-    document.getElementById('status').innerText = '😬 No songs match your vibe.';
+    statusElement.innerText = 'No tracks matched your mood.';
     return;
   }
 
@@ -66,10 +77,12 @@ window.onload = async () => {
     },
     body: JSON.stringify({
       name: `Burnlist - ${mood.toUpperCase()} 🔥`,
-      description: 'This playlist will self-destruct after one play.',
+      description: `Mood-based playlist that will self-destruct after 1 play.`,
       public: true
     })
   }).then(res => res.json());
+
+  console.log('[DEBUG] Created playlist:', playlist.name);
 
   await fetch(`https://api.spotify.com/v1/playlists/${playlist.id}/tracks`, {
     method: 'POST',
@@ -77,5 +90,8 @@ window.onload = async () => {
     body: JSON.stringify({ uris: selectedTracks })
   });
 
-  document.getElementById('status').innerText = `🔥 Your "${playlist.name}" is ready! Go burn it.`;
+  statusElement.innerText = `Your "${playlist.name}" playlist has been added to your Spotify!`;
+
+  localStorage.setItem('burnlist_id', playlist.id);
+  localStorage.setItem('burnlist_token', accessToken);
 };
