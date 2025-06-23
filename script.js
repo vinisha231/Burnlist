@@ -1,5 +1,5 @@
 const CLIENT_ID = '1b922a6cb85549db80f560b7254c1116';
-const REDIRECT_URI = 'https://vinisha231.github.io/SpotifyPlaylistGenerator/';
+const REDIRECT_URI = 'https://vinisha231.github.io/Burnlist/';
 const SCOPES = 'playlist-modify-public playlist-read-private user-library-read';
 
 // Login button
