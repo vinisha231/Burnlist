@@ -48,6 +48,55 @@ async function getSavedTracksTotal(headers) {
   return typeof data.total === 'number' ? data.total : 0;
 }
 
+/** Spotify does not expose “blocked artists” in the Web API; users can set IDs in localStorage (see README). */
+function getBlockedArtistIdsFromStorage() {
+  const raw = localStorage.getItem('burnlistBlockedArtistIds') || '';
+  return [...new Set(raw.split(/[,\s]+/).map((s) => s.trim()).filter(Boolean))];
+}
+
+function trackTouchesBlockedArtist(track, blockedIds) {
+  if (!blockedIds.length) return false;
+  return (track.artists || []).some((a) => a?.id && blockedIds.includes(a.id));
+}
+
+/** Fresh `GET /tracks` often has more accurate `is_playable` / restrictions than saved-tracks alone. */
+async function filterUrisToFreshPlayable(trackUris, headers) {
+  if (!trackUris.length) return [];
+  const ids = trackUris
+    .map((uri) => {
+      const parts = uri.split(':');
+      return parts.length >= 3 && parts[1] === 'track' ? parts[2] : null;
+    })
+    .filter(Boolean);
+
+  const playableIds = new Set();
+  for (let i = 0; i < ids.length; i += 50) {
+    const batch = ids.slice(i, i + 50);
+    const res = await fetch(
+      `https://api.spotify.com/v1/tracks?ids=${encodeURIComponent(batch.join(','))}&market=from_token`,
+      { headers }
+    );
+    if (!res.ok) {
+      batch.forEach((id) => playableIds.add(id));
+      continue;
+    }
+    const data = await res.json();
+    const arr = data.tracks || [];
+    for (let j = 0; j < arr.length; j++) {
+      const t = arr[j];
+      const id = batch[j];
+      if (!t || !id) continue;
+      if (isLikelyPlayableTrack(t)) playableIds.add(id);
+    }
+  }
+
+  return trackUris.filter((uri) => {
+    const parts = uri.split(':');
+    const id = parts.length >= 3 ? parts[2] : null;
+    return id && playableIds.has(id);
+  });
+}
+
 const moodGenres = {
   happy: ['pop', 'dance', 'funk', 'party'],
   sad: ['piano', 'acoustic', 'sad'],
@@ -205,10 +254,20 @@ function startBurnMonitor(playlistId, headers, statusElement, openLinkEl, initia
 
   async function afterSuccessfulTrackRemoval() {
     if (emptyNotified) return;
-    if (remaining <= 0) return;
-    remaining -= 1;
-    if (remaining > 0) return;
-    await finishBurnlistPlaylist();
+    if (remaining > 0) remaining -= 1;
+    const countRes = await fetch(
+      `https://api.spotify.com/v1/playlists/${playlistId}/tracks?fields=total`,
+      { headers }
+    );
+    if (!countRes.ok) {
+      if (remaining <= 0) await finishBurnlistPlaylist();
+      return;
+    }
+    const { total } = await countRes.json();
+    if (total === 0) {
+      remaining = 0;
+      await finishBurnlistPlaylist();
+    }
   }
 
   async function maybeUnfollowIfEmptyFallback() {
@@ -270,8 +329,32 @@ function startBurnMonitor(playlistId, headers, statusElement, openLinkEl, initia
     const player = await res.json();
     const ctx = player.context;
     const item = player.item;
+    const stillOurPlaylist =
+      ctx && ctx.type === 'playlist' && ctx.uri === playlistUri;
 
-    if (!ctx || ctx.type !== 'playlist' || ctx.uri !== playlistUri) {
+    if (
+      lastTrackUri &&
+      !burnedUris.has(lastTrackUri) &&
+      lastContextWasOurs &&
+      !stillOurPlaylist
+    ) {
+      const ok = await removeTrackFromPlaylist(playlistId, lastTrackUri, headers);
+      if (ok) {
+        burnedUris.add(lastTrackUri);
+        lastTrackUri = null;
+        idlePolls = 0;
+        statusElement.textContent =
+          'Playback left Burnlist — last track removed from the playlist.';
+        await afterSuccessfulTrackRemoval();
+      } else {
+        await maybeUnfollowIfEmptyFallback();
+      }
+      lastContextWasOurs = false;
+      openLinkEl.hidden = false;
+      return;
+    }
+
+    if (!stillOurPlaylist) {
       lastContextWasOurs = false;
       idlePolls = 0;
       openLinkEl.hidden = false;
@@ -384,6 +467,7 @@ async function runAfterAuth(accessToken) {
     }
 
     const pageOffsets = shuffledSavedTrackOffsets(totalLikes);
+    const blockedArtistIds = getBlockedArtistIdsFromStorage();
 
     for (const offset of pageOffsets) {
       if (selectedUris.length >= targetCount) break;
@@ -406,16 +490,17 @@ async function runAfterAuth(accessToken) {
 
       for (const track of tracks) {
         if (!isLikelyPlayableTrack(track)) continue;
+        if (trackTouchesBlockedArtist(track, blockedArtistIds)) continue;
         if (pickedUris.has(track.uri)) continue;
-        const artistId = track.artists[0]?.id;
-        if (!artistId) continue;
+    const artistId = track.artists[0]?.id;
+    if (!artistId) continue;
         const artistData = artistMap.get(artistId);
         if (!artistData) continue;
-        const artistGenres = artistData.genres || [];
+    const artistGenres = artistData.genres || [];
         const match = artistGenres.some((g) =>
           moodList.some((mg) => g.toLowerCase().includes(mg.toLowerCase()))
         );
-        if (match) {
+    if (match) {
           pickedUris.add(track.uri);
           selectedUris.push(track.uri);
           if (selectedUris.length >= targetCount) break;
@@ -433,6 +518,17 @@ async function runAfterAuth(accessToken) {
 
   if (!selectedUris.length) {
     statusElement.textContent = 'No liked songs matched this mood. Like more tracks or pick another mood.';
+    return;
+  }
+
+  statusElement.textContent = 'Double-checking tracks are playable for your account…';
+  const playableUris = await filterUrisToFreshPlayable(selectedUris, headers);
+  selectedUris.length = 0;
+  selectedUris.push(...playableUris);
+
+  if (!selectedUris.length) {
+    statusElement.textContent =
+      'No tracks passed playback checks (removed, blocked, or unavailable). Try another mood, remove likes you cannot play, or set burnlistBlockedArtistIds (see README).';
     return;
   }
 

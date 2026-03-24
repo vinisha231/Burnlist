@@ -19,9 +19,21 @@ If there aren’t enough mood matches, you’ll get fewer songs than you asked f
 
 ### Blocked artists, takedowns, and unplayable tracks
 
-Spotify’s API exposes **`is_playable`** and sometimes **`restrictions`** (e.g. market, licensing). Burnlist **skips** liked songs that are already marked **not playable** or **restricted** when building the list, uses **`market=from_token`** so availability matches your account, and runs a **cleanup** pass on the new playlist to **remove** anything still flagged unplayable after it’s created.
+Spotify’s API exposes **`is_playable`** and sometimes **`restrictions`** (e.g. market, licensing). Burnlist **skips** liked songs that are already marked **not playable** or **restricted** when scanning likes, then **re-checks** every chosen track with **`GET /v1/tracks`** and **`market=from_token`** (often stricter than saved-tracks alone). After the playlist is created, a **cleanup** pass removes anything still flagged unplayable.
 
-**What we can’t fix in code:** Spotify does not expose “you blocked this artist” as a dedicated field in the Web API. If a track still lands in the playlist but the client **won’t play** it (or only **skips** it), use **Skip** in the app — the Burnlist page treats skips like normal and removes that row when playback moves on. If Spotify never advances (rare), refresh the playlist in Spotify or try again; **completely dead / `null` rows** in a playlist may need a manual remove in the Spotify app, since the API often needs a track URI to delete by.
+**“Blocked” in the Spotify app (Don’t play this artist)** is **not** in the Web API, so the app cannot read your block list. If a blocked artist’s song is still in your **liked songs**, it can be picked until Spotify marks it unplayable on the endpoints above.
+
+**Optional:** set a **manual block list** in the browser (same device you use for Burnlist). In DevTools → Console, run once, using the artist’s Spotify ID (from the artist URL: `spotify.com/artist/<ID>`):
+
+```js
+localStorage.setItem('burnlistBlockedArtistIds', 'ARTIST_ID_1,ARTIST_ID_2');
+```
+
+Burnlist will skip any track that credits those artists. Clear with `localStorage.removeItem('burnlistBlockedArtistIds')`.
+
+You can also **remove that like** in Spotify so it won’t be chosen again.
+
+**If a track still won’t play:** use **Skip** in the app — the Burnlist tab removes rows when playback moves on. **Dead / `null` rows** may need a manual remove in Spotify; the API usually needs a track URI.
 
 ## Spotify setup (for forks / local dev)
 
