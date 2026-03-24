@@ -7,7 +7,7 @@
 </head>
 <body>
   <h1> Burnlist</h1>
-  <p>Create a mood based plyalist that self destructs after one play.</p>
+  <p>Create a mood-based playlist: each track removes itself after you hear 20 seconds or if you skip it.</p>
 
   <label for="mood">Select your mood:</label>
   <select id="mood">
@@ -19,10 +19,14 @@
     <option value="hype">🚀 Hype</option>
   </select>
 
+  <label for="song-count">Number of songs (1–50):</label>
+  <input type="number" id="song-count" min="1" max="50" value="15">
+
   <button id="login-btn">Login with Spotify</button>
   <p id="status"></p>
-
-  <!-- <script src="script.js"></script> -->
+  <div id="burn-panel" hidden>
+    <p><a id="open-playlist-link" href="#" target="_blank" rel="noopener">Open playlist in Spotify</a></p>
+  </div>
   <script type="module" src="main.js"></script>
 </body>
 </html>

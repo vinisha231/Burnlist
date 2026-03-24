@@ -1,6 +1,8 @@
 const CLIENT_ID = '1b922a6cb85549db80f560b7254c1116';
 const REDIRECT_URI = 'https://vinisha231.github.io/Burnlist/';
-const SCOPES = 'playlist-modify-public playlist-read-private user-library-read';
+// Playback state needed to remove tracks after ~20s listen or on skip
+const SCOPES =
+  'playlist-modify-public playlist-read-private user-library-read user-read-playback-state';
 
 function generateCodeVerifier(length = 128) {
   const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
@@ -18,7 +20,7 @@ async function generateCodeChallenge(verifier) {
     .replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
 }
 
-async function redirectToSpotifyAuth() {
+export async function redirectToSpotifyAuth() {
   const codeVerifier = generateCodeVerifier();
   const codeChallenge = await generateCodeChallenge(codeVerifier);
 
@@ -36,7 +38,7 @@ async function redirectToSpotifyAuth() {
   window.location = `https://accounts.spotify.com/authorize?${args.toString()}`;
 }
 
-async function getAccessTokenFromCode() {
+export async function getAccessTokenFromCode() {
   const code = new URLSearchParams(window.location.search).get('code');
   if (!code) return null;
 
@@ -57,5 +59,8 @@ async function getAccessTokenFromCode() {
   });
 
   const data = await res.json();
-  return data.access_token;
+  if (data.access_token) {
+    localStorage.removeItem('code_verifier');
+  }
+  return data.access_token ?? null;
 }
