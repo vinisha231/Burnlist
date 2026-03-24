@@ -1,6 +1,6 @@
 # Burnlist
 
-A small web app that builds a **mood-based Spotify playlist** from your **liked songs**, then **removes each track** after you’ve heard about **20 seconds** of it or **skipped** it. When the playlist is empty, it unfollows itself so it drops out of your library.
+A small web app that builds a **mood-based Spotify playlist** from your **liked songs**, then **removes each track** after you’ve heard about **20 seconds** of it or **skipped** it. After the **last** track is removed, the app **unfollows** the whole playlist (Spotify’s equivalent of deleting it from your library).
 
 **Live site:** [https://vinisha231.github.io/Burnlist/](https://vinisha231.github.io/Burnlist/)
 
@@ -8,12 +8,12 @@ A small web app that builds a **mood-based Spotify playlist** from your **liked 
 
 1. Pick a **mood** (happy, sad, angry, chill, love, hype) and how many **songs** you want (1–50).
 2. **Log in with Spotify** (OAuth with PKCE).
-3. The app scans your **liked tracks**, keeps ones whose artists’ genres fit the mood, and creates a **public, non-collaborative** playlist. Spotify does not offer a Web API to “pin” a playlist to your profile; **public** playlists can appear under **Public playlists** on your profile if your [Spotify privacy settings](https://www.spotify.com/account/privacy/) allow that.
+3. The app scans your **liked tracks** in a **random order** each run (shuffled pages and songs per page), keeps ones whose artists’ genres fit the mood, then **shuffles** the final pick so the same mood twice in a row usually yields a **different** set and order. It creates a **public, non-collaborative** playlist. Spotify does not offer a Web API to “pin” a playlist to your profile; **public** playlists can appear under **Public playlists** on your profile if your [Spotify privacy settings](https://www.spotify.com/account/privacy/) allow that.
 4. **Open the playlist in Spotify** and play it from any device.
 5. **Keep the Burnlist tab open** in your browser: it polls Spotify’s playback API. While this playlist is playing:
    - after **~20 seconds** on a track, that track is **removed** from the playlist;
    - if you **skip** to the next track first, the **previous** track is **removed**.
-   - when you skip the **last** track (or playback stops), the final track is removed after a short idle detection; when the playlist has **no tracks left**, the app **unfollows** it so it should leave **Your Library** (Spotify may still show an empty playlist briefly in some clients).
+   - when you skip the **last** track (or playback stops), the final track is removed after a short idle detection; as soon as **no songs are left**, the app **unfollows the entire playlist** so it disappears from **Your Library** (Spotify may briefly show an empty list in some clients).
 
 If there aren’t enough mood matches, you’ll get fewer songs than you asked for.
 

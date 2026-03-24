@@ -12,6 +12,42 @@ function clampSongCount(value) {
   return Math.min(SONG_MAX, Math.max(SONG_MIN, n));
 }
 
+const SAVED_PAGE_SIZE = 50;
+
+function randomBelow(n) {
+  if (n <= 0) return 0;
+  const buf = new Uint32Array(1);
+  crypto.getRandomValues(buf);
+  return buf[0] % n;
+}
+
+function shuffleInPlace(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = randomBelow(i + 1);
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+/** Random order of API offsets so each Burnlist run picks different songs for the same mood. */
+function shuffledSavedTrackOffsets(totalLikes) {
+  const offsets = [];
+  for (let o = 0; o < totalLikes; o += SAVED_PAGE_SIZE) {
+    offsets.push(o);
+  }
+  return shuffleInPlace(offsets);
+}
+
+async function getSavedTracksTotal(headers) {
+  const res = await fetch(
+    `https://api.spotify.com/v1/me/tracks?limit=1&offset=0&market=from_token`,
+    { headers }
+  );
+  if (!res.ok) return 0;
+  const data = await res.json();
+  return typeof data.total === 'number' ? data.total : 0;
+}
+
 const moodGenres = {
   happy: ['pop', 'dance', 'funk', 'party'],
   sad: ['piano', 'acoustic', 'sad'],
@@ -37,7 +73,6 @@ function clearOAuthQuery() {
   window.history.replaceState({}, document.title, path);
 }
 
-/** Up to 50 IDs per request — avoids one HTTP call per track. */
 /** Spotify may omit `is_playable`; treat missing as playable, explicit false as skip. */
 function isLikelyPlayableTrack(track) {
   if (!track?.uri || track.type !== 'track') return false;
@@ -125,21 +160,58 @@ async function removeTrackFromPlaylist(playlistId, trackUri, headers) {
   if (!res.ok) {
     const err = await res.text();
     console.warn('[Burnlist] Remove track failed:', res.status, err);
+    return false;
   }
+  return true;
 }
 
-function startBurnMonitor(playlistId, headers, statusElement, openLinkEl) {
+/** Spotify has no “delete playlist” in the Web API; unfollowing removes it from your library (same as deleting for the owner). */
+async function unfollowBurnlistPlaylist(playlistId, headers) {
+  const res = await fetch(`https://api.spotify.com/v1/playlists/${playlistId}/followers`, {
+    method: 'DELETE',
+    headers
+  });
+  if (!res.ok) {
+    console.warn('[Burnlist] Unfollow playlist failed:', res.status, await res.text());
+  }
+  return res.ok;
+}
+
+function startBurnMonitor(playlistId, headers, statusElement, openLinkEl, initialTrackCount) {
   const playlistUri = `spotify:playlist:${playlistId}`;
   let lastTrackUri = null;
   let lastProgress = 0;
   const burnedUris = new Set();
   let emptyNotified = false;
+  let remaining = Math.max(0, Number(initialTrackCount) || 0);
+  let timerId = null;
   /** True while the last poll saw this Burnlist as the playback context (needed for last-track / idle handling). */
   let lastContextWasOurs = false;
   /** Consecutive polls with no active player — avoids removing the last track on a flaky 204. */
   let idlePolls = 0;
 
-  async function maybeUnfollowIfEmpty() {
+  async function finishBurnlistPlaylist() {
+    if (emptyNotified) return;
+    emptyNotified = true;
+    if (timerId != null) {
+      clearInterval(timerId);
+      timerId = null;
+    }
+    statusElement.textContent =
+      'Burnlist finished — playlist removed from your library. You can make a new Burnlist anytime.';
+    openLinkEl.hidden = true;
+    await unfollowBurnlistPlaylist(playlistId, headers);
+  }
+
+  async function afterSuccessfulTrackRemoval() {
+    if (emptyNotified) return;
+    if (remaining <= 0) return;
+    remaining -= 1;
+    if (remaining > 0) return;
+    await finishBurnlistPlaylist();
+  }
+
+  async function maybeUnfollowIfEmptyFallback() {
     if (emptyNotified) return;
     const countRes = await fetch(
       `https://api.spotify.com/v1/playlists/${playlistId}/tracks?fields=total`,
@@ -148,19 +220,12 @@ function startBurnMonitor(playlistId, headers, statusElement, openLinkEl) {
     if (!countRes.ok) return;
     const { total } = await countRes.json();
     if (total !== 0) return;
-    emptyNotified = true;
-    statusElement.textContent =
-      'Playlist burned — empty. Removed from your library. You can make a new Burnlist anytime.';
-    const unfollow = await fetch(`https://api.spotify.com/v1/playlists/${playlistId}/followers`, {
-      method: 'DELETE',
-      headers
-    });
-    if (!unfollow.ok) {
-      console.warn('[Burnlist] Unfollow empty playlist failed:', unfollow.status, await unfollow.text());
-    }
+    remaining = 0;
+    await finishBurnlistPlaylist();
   }
 
   const tick = async () => {
+    if (emptyNotified) return;
     const res = await fetch('https://api.spotify.com/v1/me/player', { headers });
     if (res.status === 401) {
       statusElement.textContent = 'Session expired — log in again.';
@@ -176,14 +241,18 @@ function startBurnMonitor(playlistId, headers, statusElement, openLinkEl) {
         !burnedUris.has(lastTrackUri) &&
         lastContextWasOurs
       ) {
-        await removeTrackFromPlaylist(playlistId, lastTrackUri, headers);
-        burnedUris.add(lastTrackUri);
-        lastTrackUri = null;
-        lastContextWasOurs = false;
-        idlePolls = 0;
-        statusElement.textContent =
-          'Playback stopped — last track removed. If the list is empty, it is unfollowed.';
-        await maybeUnfollowIfEmpty();
+        const ok = await removeTrackFromPlaylist(playlistId, lastTrackUri, headers);
+        if (ok) {
+          burnedUris.add(lastTrackUri);
+          lastTrackUri = null;
+          lastContextWasOurs = false;
+          idlePolls = 0;
+          statusElement.textContent =
+            'Playback stopped — last track removed. Deleting playlist if empty…';
+          await afterSuccessfulTrackRemoval();
+        } else {
+          await maybeUnfollowIfEmptyFallback();
+        }
       } else {
         statusElement.textContent =
           'Open Spotify, start playing your Burnlist playlist on any device — we will remove each track after 20s or when you skip.';
@@ -222,14 +291,18 @@ function startBurnMonitor(playlistId, headers, statusElement, openLinkEl) {
         !burnedUris.has(lastTrackUri) &&
         lastContextWasOurs
       ) {
-        await removeTrackFromPlaylist(playlistId, lastTrackUri, headers);
-        burnedUris.add(lastTrackUri);
-        lastTrackUri = null;
-        lastContextWasOurs = false;
-        idlePolls = 0;
-        statusElement.textContent =
-          'Playback stopped — last track removed. If the list is empty, it is unfollowed.';
-        await maybeUnfollowIfEmpty();
+        const ok = await removeTrackFromPlaylist(playlistId, lastTrackUri, headers);
+        if (ok) {
+          burnedUris.add(lastTrackUri);
+          lastTrackUri = null;
+          lastContextWasOurs = false;
+          idlePolls = 0;
+          statusElement.textContent =
+            'Playback stopped — last track removed. Deleting playlist if empty…';
+          await afterSuccessfulTrackRemoval();
+        } else {
+          await maybeUnfollowIfEmptyFallback();
+        }
       } else {
         statusElement.textContent =
           'Open Spotify, start playing your Burnlist playlist on any device — we will remove each track after 20s or when you skip.';
@@ -251,10 +324,12 @@ function startBurnMonitor(playlistId, headers, statusElement, openLinkEl) {
 
     if (currentUri !== lastTrackUri) {
       if (!burnedUris.has(lastTrackUri)) {
-        await removeTrackFromPlaylist(playlistId, lastTrackUri, headers);
-        burnedUris.add(lastTrackUri);
-        statusElement.textContent = 'Skipped — track removed from playlist.';
-        await maybeUnfollowIfEmpty();
+        const ok = await removeTrackFromPlaylist(playlistId, lastTrackUri, headers);
+        if (ok) {
+          burnedUris.add(lastTrackUri);
+          statusElement.textContent = 'Skipped — track removed from playlist.';
+          await afterSuccessfulTrackRemoval();
+        }
       }
       lastTrackUri = currentUri;
       lastProgress = progress;
@@ -262,17 +337,19 @@ function startBurnMonitor(playlistId, headers, statusElement, openLinkEl) {
     }
 
     if (!burnedUris.has(currentUri) && progress >= BURN_MS) {
-      await removeTrackFromPlaylist(playlistId, currentUri, headers);
-      burnedUris.add(currentUri);
-      statusElement.textContent = '20s played — track removed from playlist.';
-      await maybeUnfollowIfEmpty();
+      const ok = await removeTrackFromPlaylist(playlistId, currentUri, headers);
+      if (ok) {
+        burnedUris.add(currentUri);
+        statusElement.textContent = '20s played — track removed from playlist.';
+        await afterSuccessfulTrackRemoval();
+      }
     }
 
     lastProgress = progress;
   };
 
   tick();
-  return setInterval(tick, POLL_MS);
+  timerId = setInterval(tick, POLL_MS);
 }
 
 async function runAfterAuth(accessToken) {
@@ -297,12 +374,22 @@ async function runAfterAuth(accessToken) {
   const userId = user.id;
 
   const selectedUris = [];
-  let offset = 0;
+  const pickedUris = new Set();
 
   try {
-    while (selectedUris.length < targetCount) {
+    const totalLikes = await getSavedTracksTotal(headers);
+    if (totalLikes === 0) {
+      statusElement.textContent = 'No liked songs in your library.';
+      return;
+    }
+
+    const pageOffsets = shuffledSavedTrackOffsets(totalLikes);
+
+    for (const offset of pageOffsets) {
+      if (selectedUris.length >= targetCount) break;
+
       const res = await fetch(
-        `https://api.spotify.com/v1/me/tracks?limit=50&offset=${offset}&market=from_token`,
+        `https://api.spotify.com/v1/me/tracks?limit=${SAVED_PAGE_SIZE}&offset=${offset}&market=from_token`,
         { headers }
       );
       if (!res.ok) {
@@ -310,15 +397,16 @@ async function runAfterAuth(accessToken) {
         return;
       }
       const data = await res.json();
-      if (!data.items?.length) break;
+      if (!data.items?.length) continue;
 
-      const tracks = data.items.map((item) => item.track).filter(Boolean);
+      const tracks = shuffleInPlace(data.items.map((item) => item.track).filter(Boolean));
       const artistIds = tracks.map((t) => t.artists[0]?.id).filter(Boolean);
 
       const artistMap = await fetchArtistMap(artistIds, headers);
 
       for (const track of tracks) {
         if (!isLikelyPlayableTrack(track)) continue;
+        if (pickedUris.has(track.uri)) continue;
         const artistId = track.artists[0]?.id;
         if (!artistId) continue;
         const artistData = artistMap.get(artistId);
@@ -328,15 +416,13 @@ async function runAfterAuth(accessToken) {
           moodList.some((mg) => g.toLowerCase().includes(mg.toLowerCase()))
         );
         if (match) {
+          pickedUris.add(track.uri);
           selectedUris.push(track.uri);
           if (selectedUris.length >= targetCount) break;
         }
       }
 
       statusElement.textContent = `Scanning your likes… (${selectedUris.length}/${targetCount} matches)`;
-
-      offset += 50;
-      if (tracks.length < 50) break;
     }
   } catch (e) {
     console.error(e);
@@ -355,6 +441,8 @@ async function runAfterAuth(accessToken) {
       ? ` (${selectedUris.length} matched; you asked for ${targetCount})`
       : ` (${selectedUris.length} songs)`;
 
+  shuffleInPlace(selectedUris);
+
   const playlist = await fetch(`https://api.spotify.com/v1/users/${userId}/playlists`, {
     method: 'POST',
     headers: {
@@ -363,7 +451,7 @@ async function runAfterAuth(accessToken) {
     },
     body: JSON.stringify({
       name: `Burnlist — ${mood.toUpperCase()} 🔥`,
-      description: 'Public Burnlist: tracks remove after ~20s of play or when you skip; empty list unfollows.',
+      description: 'Public Burnlist: tracks remove after ~20s or skip; when the last track is gone the playlist is removed from your library.',
       public: true,
       collaborative: false
     })
@@ -386,15 +474,14 @@ async function runAfterAuth(accessToken) {
     `https://api.spotify.com/v1/playlists/${playlist.id}/tracks?fields=total`,
     { headers }
   );
+  let playlistTrackCount = selectedUris.length;
   if (totalRes.ok) {
     const { total } = await totalRes.json();
+    playlistTrackCount = total;
     if (total === 0) {
       statusElement.textContent =
         'No playable tracks ended up in the playlist (blocked, removed, or unavailable in your region). Try another mood or different likes.';
-      await fetch(`https://api.spotify.com/v1/playlists/${playlist.id}/followers`, {
-        method: 'DELETE',
-        headers
-      }).catch(() => {});
+      await unfollowBurnlistPlaylist(playlist.id, headers);
       return;
     }
   }
@@ -421,7 +508,7 @@ async function runAfterAuth(accessToken) {
 
   statusElement.innerHTML = `Playlist ready${countNote}. <strong>Open Spotify</strong> and play it — each song leaves the list after 20 seconds or when you skip.`;
 
-  startBurnMonitor(playlist.id, headers, statusElement, openLink);
+  startBurnMonitor(playlist.id, headers, statusElement, openLink, playlistTrackCount);
 }
 
 window.onload = async () => {
