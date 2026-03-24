@@ -103,16 +103,111 @@ const moodGenres = {
   angry: ['metal', 'rock', 'punk', 'phonk'],
   chill: ['lofi', 'ambient', 'chill'],
   love: ['rnb', 'romantic', 'soul', 'soft'],
-  hype: ['rap', 'hip hop', 'edm']
+  hype: ['rap', 'hip hop', 'edm'],
+  /** Emotional / introspective — genres + optional vibe artists below */
+  feelings: [
+    'indie',
+    'soul',
+    'bedroom pop',
+    'alternative r&b',
+    'alt r&b',
+    'emo rap',
+    'singer-songwriter',
+    'heartbreak',
+    'melancholia'
+  ],
+  hiphop: [
+    'hip hop',
+    'rap',
+    'trap',
+    'drill',
+    'cloud rap',
+    'southern hip hop',
+    'west coast hip hop',
+    'east coast hip hop',
+    'gangster rap'
+  ],
+  rnb: [
+    'r&b',
+    'rnb',
+    'neo soul',
+    'contemporary r&b',
+    'contemporary rnb',
+    'alternative r&b',
+    'alt r&b',
+    'urban contemporary'
+  ],
+  jpop: ['j-pop', 'jpop', 'japanese', 'anime', 'city pop', 'j-rock', 'japanese pop', 'kawaii']
 };
 
+/**
+ * Spotify artist IDs that always count as matching that vibe (on top of genre tags).
+ * Genres from the API are often incomplete; this nudges R&B, hip hop, etc. toward known artists.
+ */
+const moodVibeArtists = {
+  rnb: [
+    '4Gso3d4CscCijv0lmajZWs', // Don Toliver
+    '0EyhkwP3UnwGFBy6xwKjSy', // EsDeeKid
+    '7tYKF4AwGiZ7pzMWlG6Uw5', // SZA
+    '6XK9f2J6CVjnmJyC0hPkKm' // Brent Faiyaz
+  ],
+  hiphop: [
+    '3TVXtAsR1InLMwjdDAPd1', // Drake
+    '0Y5tJV1FHgvjRnXSFUy8X7', // Travis Scott
+    '1RyvY7e3zZ3B9bxN6cJe9u' // Future
+  ],
+  feelings: [
+    '1Xyo4u2uQC4oBc3zbzVmLJ', // The Weeknd
+    '66CXWjxzNUsdJxJ2JdwvnR', // Ariana Grande
+    '06HL4z0CvFAxyc27GXpf02' // Taylor Swift
+  ],
+  jpop: [
+    '7lbSsjNp0GjN4Xn3lbHNUe', // Yoasobi (example; genre still primary for J-Pop)
+    '1snhtMLeb2AZrIEWtTV1gp' // ONE OK ROCK
+  ],
+  happy: [],
+  sad: [],
+  angry: [],
+  chill: [],
+  love: [],
+  hype: []
+};
+
+const moodDisplayNames = {
+  happy: 'Happy',
+  sad: 'Sad',
+  angry: 'Angry',
+  chill: 'Chill',
+  love: 'Love',
+  hype: 'Hype',
+  feelings: 'Feelings',
+  hiphop: 'Hip Hop',
+  rnb: 'R&B',
+  jpop: 'J-Pop'
+};
+
+function moodLabel(mood) {
+  return moodDisplayNames[mood] || mood.charAt(0).toUpperCase() + mood.slice(1);
+}
+
+function initBlockedArtistsField() {
+  const ta = document.getElementById('blocked-artists');
+  if (ta) ta.value = localStorage.getItem('burnlistBlockedArtistIds') || '';
+}
+
 function setupLogin() {
-  document.getElementById('login-btn').addEventListener('click', () => {
+  const form = document.getElementById('burn-form');
+  if (!form || form.dataset.bound === '1') return;
+  form.dataset.bound = '1';
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
     const mood = document.getElementById('mood').value;
     const songCount = clampSongCount(document.getElementById('song-count').value);
     document.getElementById('song-count').value = String(songCount);
+    const blocked = document.getElementById('blocked-artists')?.value?.trim() ?? '';
     localStorage.setItem('selectedMood', mood);
     localStorage.setItem('playlistSongCount', String(songCount));
+    localStorage.setItem('burnlistBlockedArtistIds', blocked);
     redirectToSpotifyAuth();
   });
 }
@@ -468,6 +563,7 @@ async function runAfterAuth(accessToken) {
 
     const pageOffsets = shuffledSavedTrackOffsets(totalLikes);
     const blockedArtistIds = getBlockedArtistIdsFromStorage();
+    const vibeIds = moodVibeArtists[mood] || [];
 
     for (const offset of pageOffsets) {
       if (selectedUris.length >= targetCount) break;
@@ -492,15 +588,24 @@ async function runAfterAuth(accessToken) {
         if (!isLikelyPlayableTrack(track)) continue;
         if (trackTouchesBlockedArtist(track, blockedArtistIds)) continue;
         if (pickedUris.has(track.uri)) continue;
-    const artistId = track.artists[0]?.id;
-    if (!artistId) continue;
-        const artistData = artistMap.get(artistId);
-        if (!artistData) continue;
-    const artistGenres = artistData.genres || [];
-        const match = artistGenres.some((g) =>
-          moodList.some((mg) => g.toLowerCase().includes(mg.toLowerCase()))
-        );
-    if (match) {
+
+        const vibeMatch =
+          vibeIds.length > 0 &&
+          (track.artists || []).some((a) => a?.id && vibeIds.includes(a.id));
+
+        let genreMatch = false;
+        if (!vibeMatch) {
+          const artistId = track.artists[0]?.id;
+          if (!artistId) continue;
+          const artistData = artistMap.get(artistId);
+          if (!artistData) continue;
+          const artistGenres = artistData.genres || [];
+          genreMatch = artistGenres.some((g) =>
+            moodList.some((mg) => g.toLowerCase().includes(mg.toLowerCase()))
+          );
+        }
+
+        if (vibeMatch || genreMatch) {
           pickedUris.add(track.uri);
           selectedUris.push(track.uri);
           if (selectedUris.length >= targetCount) break;
@@ -546,7 +651,7 @@ async function runAfterAuth(accessToken) {
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({
-      name: `Burnlist — ${mood.toUpperCase()} 🔥`,
+      name: `Burnlist — ${moodLabel(mood)} 🔥`,
       description: 'Public Burnlist: tracks remove after ~20s or skip; when the last track is gone the playlist is removed from your library.',
       public: true,
       collaborative: false
@@ -608,6 +713,7 @@ async function runAfterAuth(accessToken) {
 }
 
 window.onload = async () => {
+  initBlockedArtistsField();
   const hasCode = new URLSearchParams(window.location.search).has('code');
 
   if (!hasCode) {

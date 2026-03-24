@@ -2,30 +2,81 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Burnlist — mood playlists from your likes; tracks burn away after 20 seconds or a skip.">
   <title>Burnlist</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <h1> Burnlist</h1>
-  <p>Create a mood-based playlist: each track removes itself after you hear 20 seconds or if you skip it.</p>
+  <div class="app">
+    <header class="hero">
+      <h1>Burnlist</h1>
+      <p class="tagline">Create a mood-based playlist from your Spotify likes. Each track removes itself after ~20 seconds of play or when you skip — then the whole list disappears from your library.</p>
+    </header>
 
-  <label for="mood">Select your mood:</label>
-  <select id="mood">
-    <option value="happy">😄 Happy</option>
-    <option value="sad">😢 Sad</option>
-    <option value="angry">😡 Angry</option>
-    <option value="chill">😌 Chill</option>
-    <option value="love">💖 Love</option>
-    <option value="hype">🚀 Hype</option>
-  </select>
+    <main class="layout">
+      <section class="panel panel--form" aria-labelledby="form-heading">
+        <h2 id="form-heading" class="panel__title">Build your list</h2>
 
-  <label for="song-count">Number of songs (1–50):</label>
-  <input type="number" id="song-count" min="1" max="50" value="15">
+        <form id="burn-form" novalidate>
+          <label for="mood">Mood &amp; theme</label>
+          <select id="mood">
+            <optgroup label="Feelings">
+              <option value="happy">😄 Happy</option>
+              <option value="sad">😢 Sad</option>
+              <option value="angry">😡 Angry</option>
+              <option value="chill">😌 Chill</option>
+              <option value="love">💖 Love</option>
+              <option value="hype">🚀 Hype</option>
+              <option value="feelings">🫶 Feelings</option>
+            </optgroup>
+            <optgroup label="Themes">
+              <option value="hiphop">🎤 Hip Hop</option>
+              <option value="rnb">🎹 R&amp;B</option>
+              <option value="jpop">🗾 J-Pop</option>
+            </optgroup>
+          </select>
 
-  <button id="login-btn">Login with Spotify</button>
-  <p id="status"></p>
-  <div id="burn-panel" hidden>
-    <p><a id="open-playlist-link" href="#" target="_blank" rel="noopener">Open playlist in Spotify</a></p>
+          <label for="song-count">Number of songs (1–50)</label>
+          <input type="number" id="song-count" min="1" max="50" value="15" autocomplete="off">
+
+          <label for="blocked-artists">Skip artists (optional)</label>
+          <p class="field-hint">Spotify doesn’t share your “blocked” list with apps. Paste comma‑separated <strong>artist IDs</strong> from an artist URL (<code>spotify.com/artist/…</code>) to exclude them.</p>
+          <textarea id="blocked-artists" rows="2" placeholder="e.g. 2YZyUsLzbd9tNdmWn81Z3v" spellcheck="false"></textarea>
+
+          <button type="submit" id="login-btn" class="btn btn--primary">Login with Spotify</button>
+        </form>
+
+        <p id="status" role="status" aria-live="polite"></p>
+
+        <div id="burn-panel" class="burn-panel" hidden>
+          <p class="burn-panel__label">Your playlist is ready</p>
+          <a id="open-playlist-link" class="btn btn--open" href="#" target="_blank" rel="noopener">Open playlist in Spotify</a>
+        </div>
+      </section>
+
+      <aside class="panel panel--info" aria-labelledby="info-heading">
+        <h2 id="info-heading" class="panel__title">How it works</h2>
+        <ol class="steps">
+          <li>Pick a <strong>feeling</strong> or <strong>theme</strong> (Hip Hop, R&amp;B, J-Pop, etc.) and size — we match genres and a few <strong>vibe artists</strong> per theme.</li>
+          <li>Log in with Spotify; keep this <strong>tab open</strong> while you listen.</li>
+          <li>Open the playlist on any device. Tracks drop off after ~20s or a skip; when it’s empty, the playlist leaves your library.</li>
+        </ol>
+
+        <h3 class="panel__subtitle">Tips</h3>
+        <ul class="tips">
+          <li>More likes = more variety for each mood.</li>
+          <li>Same mood twice usually picks different songs (random order).</li>
+          <li>If something won’t play, skip — the row still burns off.</li>
+        </ul>
+      </aside>
+    </main>
+
+    <footer class="site-footer">
+      <a href="https://github.com/vinisha231/Burnlist" target="_blank" rel="noopener noreferrer">Source on GitHub</a>
+      <span class="site-footer__dot" aria-hidden="true">·</span>
+      <span>Not affiliated with Spotify</span>
+    </footer>
   </div>
   <script type="module" src="main.js"></script>
 </body>
