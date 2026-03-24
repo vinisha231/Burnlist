@@ -1,1 +1,339 @@
+/* =========================================================
+   BURNLIST — style.css
+   Aesthetic: smoldering dark, ember glow, burn-after-reading
+   ========================================================= */
 
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;0,900;1,700&family=DM+Mono:wght@300;400;500&display=swap');
+
+/* ── CSS Variables ───────────────────────────────────────── */
+:root {
+  --bg-deep:    #0a0806;
+  --bg-mid:     #110e0a;
+  --bg-card:    #1a1410;
+  --ember:      #ff5c1a;
+  --ember-dim:  #c4400d;
+  --ember-glow: #ff8c4a;
+  --ash:        #7a6f65;
+  --smoke:      #3d3530;
+  --text:       #e8ddd5;
+  --text-dim:   #9e9088;
+  --border:     #2c221a;
+  --radius:     6px;
+  --font-display: 'Playfair Display', Georgia, serif;
+  --font-body:    'DM Mono', 'Courier New', monospace;
+}
+
+/* ── Reset & Base ────────────────────────────────────────── */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  height: 100%;
+}
+
+body {
+  min-height: 100%;
+  background-color: var(--bg-deep);
+  background-image:
+    radial-gradient(ellipse 80% 60% at 50% -10%, rgba(200, 60, 0, 0.18) 0%, transparent 70%),
+    radial-gradient(ellipse 40% 30% at 80% 90%,  rgba(255, 80, 20, 0.07) 0%, transparent 60%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+  font-family: var(--font-body);
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0 24px 80px;
+  overflow-x: hidden;
+}
+
+/* ── Thin ember line at top ──────────────────────────────── */
+body::before {
+  content: '';
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent 0%, var(--ember) 40%, var(--ember-glow) 60%, transparent 100%);
+  animation: ember-line 4s ease-in-out infinite alternate;
+  z-index: 10;
+}
+
+@keyframes ember-line {
+  from { opacity: 0.6; }
+  to   { opacity: 1; }
+}
+
+/* ── Container ───────────────────────────────────────────── */
+.app-wrapper,
+body > h1,
+body > p,
+body > label,
+body > select,
+body > input,
+body > button,
+body > p#status,
+body > div#burn-panel {
+  width: 100%;
+  max-width: 520px;
+}
+
+/* ── Heading ─────────────────────────────────────────────── */
+h1 {
+  font-family: var(--font-display);
+  font-size: clamp(3.2rem, 10vw, 5.5rem);
+  font-weight: 900;
+  font-style: italic;
+  line-height: 0.95;
+  letter-spacing: -0.02em;
+  margin-top: 72px;
+  margin-bottom: 22px;
+  color: var(--text);
+  position: relative;
+  display: inline-block;
+  text-shadow:
+    0 0 40px rgba(255, 92, 26, 0.45),
+    0 0 80px rgba(255, 92, 26, 0.15);
+  animation: title-breathe 5s ease-in-out infinite alternate;
+}
+
+@keyframes title-breathe {
+  from { text-shadow: 0 0 30px rgba(255, 92, 26, 0.35), 0 0 70px rgba(255, 92, 26, 0.10); }
+  to   { text-shadow: 0 0 50px rgba(255, 92, 26, 0.60), 0 0 100px rgba(255, 92, 26, 0.20); }
+}
+
+/* The 🔥 decorative slash under title */
+h1::after {
+  content: '';
+  display: block;
+  width: 48px;
+  height: 2px;
+  background: var(--ember);
+  margin-top: 14px;
+  opacity: 0.8;
+}
+
+/* ── Description paragraph ───────────────────────────────── */
+body > p:first-of-type {
+  font-size: 0.78rem;
+  line-height: 1.75;
+  color: var(--text-dim);
+  letter-spacing: 0.02em;
+  margin-bottom: 48px;
+  border-left: 2px solid var(--smoke);
+  padding-left: 14px;
+}
+
+/* ── Form sections ───────────────────────────────────────── */
+label {
+  display: block;
+  font-size: 0.65rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ash);
+  margin-bottom: 8px;
+  margin-top: 28px;
+}
+
+select,
+input[type="number"] {
+  width: 100%;
+  max-width: 520px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 0.92rem;
+  padding: 14px 18px;
+  outline: none;
+  appearance: none;
+  -webkit-appearance: none;
+  transition: border-color 0.25s, box-shadow 0.25s;
+  cursor: pointer;
+}
+
+select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23ff5c1a' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 16px center;
+  padding-right: 42px;
+}
+
+select:focus,
+input[type="number"]:focus {
+  border-color: var(--ember-dim);
+  box-shadow: 0 0 0 3px rgba(255, 92, 26, 0.12), 0 0 18px rgba(255, 92, 26, 0.08);
+}
+
+select option {
+  background: var(--bg-card);
+  color: var(--text);
+}
+
+input[type="number"] {
+  cursor: default;
+}
+
+/* Remove number spinners */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+}
+input[type="number"] { -moz-appearance: textfield; }
+
+/* ── Login button ────────────────────────────────────────── */
+button#login-btn {
+  display: block;
+  width: 100%;
+  max-width: 520px;
+  margin-top: 40px;
+  padding: 16px 32px;
+  font-family: var(--font-body);
+  font-size: 0.78rem;
+  font-weight: 500;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: #fff;
+  background: linear-gradient(135deg, var(--ember-dim) 0%, var(--ember) 60%, var(--ember-glow) 100%);
+  border: none;
+  border-radius: var(--radius);
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.2s, box-shadow 0.3s;
+  box-shadow:
+    0 4px 24px rgba(255, 92, 26, 0.35),
+    0 1px 0 rgba(255,255,255,0.08) inset;
+}
+
+button#login-btn::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, transparent 30%, rgba(255,255,255,0.12) 100%);
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+button#login-btn:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    0 8px 40px rgba(255, 92, 26, 0.50),
+    0 1px 0 rgba(255,255,255,0.1) inset;
+}
+
+button#login-btn:hover::before {
+  opacity: 1;
+}
+
+button#login-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 12px rgba(255, 92, 26, 0.3);
+}
+
+/* ── Status message ──────────────────────────────────────── */
+p#status {
+  margin-top: 20px;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  color: var(--ash);
+  min-height: 1.5em;
+  text-align: center;
+  transition: color 0.3s;
+}
+
+p#status:not(:empty) {
+  color: var(--ember-glow);
+  animation: status-pulse 2s ease-in-out infinite;
+}
+
+@keyframes status-pulse {
+  0%, 100% { opacity: 0.8; }
+  50%       { opacity: 1; }
+}
+
+/* ── Burn panel ──────────────────────────────────────────── */
+div#burn-panel {
+  margin-top: 32px;
+  padding: 24px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  position: relative;
+  animation: panel-in 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes panel-in {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Glow edge on burn panel */
+div#burn-panel::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: calc(var(--radius) + 1px);
+  background: linear-gradient(135deg, var(--ember-dim), transparent 60%);
+  opacity: 0.25;
+  pointer-events: none;
+}
+
+/* ── Playlist link ───────────────────────────────────────── */
+a#open-playlist-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.75rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--ember-glow);
+  text-decoration: none;
+  transition: color 0.2s, gap 0.2s;
+}
+
+a#open-playlist-link::after {
+  content: '↗';
+  font-size: 0.85em;
+  transition: transform 0.2s;
+}
+
+a#open-playlist-link:hover {
+  color: #fff;
+  gap: 12px;
+}
+
+a#open-playlist-link:hover::after {
+  transform: translate(2px, -2px);
+}
+
+/* ── Scrollbar ───────────────────────────────────────────── */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--smoke);
+  border-radius: 4px;
+}
+
+/* ── Page load fade-in ───────────────────────────────────── */
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+h1                      { animation: fade-up 0.7s 0.05s cubic-bezier(0.16,1,0.3,1) both, title-breathe 5s 0.8s ease-in-out infinite alternate; }
+body > p:first-of-type  { animation: fade-up 0.7s 0.15s cubic-bezier(0.16,1,0.3,1) both; }
+label:nth-of-type(1)    { animation: fade-up 0.6s 0.22s cubic-bezier(0.16,1,0.3,1) both; }
+select                  { animation: fade-up 0.6s 0.28s cubic-bezier(0.16,1,0.3,1) both; }
+label:nth-of-type(2)    { animation: fade-up 0.6s 0.34s cubic-bezier(0.16,1,0.3,1) both; }
+input[type="number"]    { animation: fade-up 0.6s 0.40s cubic-bezier(0.16,1,0.3,1) both; }
+button#login-btn        { animation: fade-up 0.6s 0.50s cubic-bezier(0.16,1,0.3,1) both; }
+
+/* ── Responsive tweaks ───────────────────────────────────── */
+@media (max-width: 420px) {
+  h1 { font-size: 3rem; margin-top: 48px; }
+  body { padding: 0 16px 60px; }
+}
