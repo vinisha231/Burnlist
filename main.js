@@ -37,6 +37,28 @@ function clearOAuthQuery() {
   window.history.replaceState({}, document.title, path);
 }
 
+/** Up to 50 IDs per request — avoids one HTTP call per track. */
+async function fetchArtistMap(artistIds, headers) {
+  const unique = [...new Set(artistIds)].filter(Boolean);
+  const map = new Map();
+  for (let i = 0; i < unique.length; i += 50) {
+    const batch = unique.slice(i, i + 50);
+    const res = await fetch(
+      `https://api.spotify.com/v1/artists?ids=${encodeURIComponent(batch.join(','))}`,
+      { headers }
+    );
+    if (!res.ok) {
+      const detail = await res.text();
+      throw new Error(`Artists ${res.status}: ${detail}`);
+    }
+    const data = await res.json();
+    for (const a of data.artists || []) {
+      if (a?.id) map.set(a.id, a);
+    }
+  }
+  return map;
+}
+
 async function removeTrackFromPlaylist(playlistId, trackUri, headers) {
   const res = await fetch(`https://api.spotify.com/v1/playlists/${playlistId}/tracks`, {
     method: 'DELETE',
@@ -141,11 +163,12 @@ async function runAfterAuth(accessToken) {
   const burnPanel = document.getElementById('burn-panel');
   const openLink = document.getElementById('open-playlist-link');
 
-  statusElement.textContent = '🎧 Logged in! Creating your mood-based playlist…';
+  statusElement.textContent = '🎧 Logged in! Scanning your likes…';
 
   const headers = { Authorization: 'Bearer ' + accessToken };
   const mood = localStorage.getItem('selectedMood') || 'chill';
   const targetCount = clampSongCount(localStorage.getItem('playlistSongCount'));
+  const moodList = moodGenres[mood] || moodGenres.chill;
 
   const user = await fetch('https://api.spotify.com/v1/me', { headers }).then((r) => r.json());
   if (user.error) {
@@ -154,33 +177,52 @@ async function runAfterAuth(accessToken) {
   }
   const userId = user.id;
 
-  let allTracks = [];
-  let offset = 0;
-  while (true) {
-    const res = await fetch(
-      `https://api.spotify.com/v1/me/tracks?limit=50&offset=${offset}`,
-      { headers }
-    );
-    const data = await res.json();
-    if (!data.items?.length) break;
-    allTracks.push(...data.items.map((item) => item.track));
-    offset += 50;
-  }
-
   const selectedUris = [];
-  for (const track of allTracks) {
-    const artistId = track.artists[0]?.id;
-    if (!artistId) continue;
+  let offset = 0;
 
-    const artistRes = await fetch(`https://api.spotify.com/v1/artists/${artistId}`, { headers });
-    const artistData = await artistRes.json();
-    const artistGenres = artistData.genres || [];
-    const moodList = moodGenres[mood] || moodGenres.chill;
-    const match = artistGenres.some((g) => moodList.some((mg) => g.includes(mg)));
-    if (match) {
-      selectedUris.push(track.uri);
+  try {
+    while (selectedUris.length < targetCount) {
+      const res = await fetch(
+        `https://api.spotify.com/v1/me/tracks?limit=50&offset=${offset}`,
+        { headers }
+      );
+      if (!res.ok) {
+        statusElement.textContent = `Could not load liked songs (${res.status}). Try again.`;
+        return;
+      }
+      const data = await res.json();
+      if (!data.items?.length) break;
+
+      const tracks = data.items.map((item) => item.track).filter(Boolean);
+      const artistIds = tracks.map((t) => t.artists[0]?.id).filter(Boolean);
+
+      const artistMap = await fetchArtistMap(artistIds, headers);
+
+      for (const track of tracks) {
+        const artistId = track.artists[0]?.id;
+        if (!artistId) continue;
+        const artistData = artistMap.get(artistId);
+        if (!artistData) continue;
+        const artistGenres = artistData.genres || [];
+        const match = artistGenres.some((g) =>
+          moodList.some((mg) => g.toLowerCase().includes(mg.toLowerCase()))
+        );
+        if (match) {
+          selectedUris.push(track.uri);
+          if (selectedUris.length >= targetCount) break;
+        }
+      }
+
+      statusElement.textContent = `Scanning your likes… (${selectedUris.length}/${targetCount} matches)`;
+
+      offset += 50;
+      if (tracks.length < 50) break;
     }
-    if (selectedUris.length >= targetCount) break;
+  } catch (e) {
+    console.error(e);
+    statusElement.textContent =
+      'Something went wrong talking to Spotify. Wait a minute and try again, or check the browser console.';
+    return;
   }
 
   if (!selectedUris.length) {
