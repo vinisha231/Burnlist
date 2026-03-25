@@ -1,7 +1,9 @@
 import { getAccessTokenFromCode, redirectToSpotifyAuth } from './auth.js';
 
+/** Remove row after this long only if you stay on the same track (no next/skip). */
 const BURN_MS = 20_000;
-const POLL_MS = 1500;
+/** Poll often so Next/skip removes the previous song quickly (no minimum listen time for skips). */
+const POLL_MS = 900;
 
 const SONG_MIN = 1;
 const SONG_MAX = 50;
@@ -464,7 +466,7 @@ function startBurnMonitor(playlistId, headers, statusElement, openLinkEl, initia
         }
       } else {
         statusElement.textContent =
-          'Open Spotify, start playing your Burnlist playlist on any device — we will remove each track after 20s or when you skip.';
+          'Open Spotify and play this Burnlist. Next removes a song immediately; ~20s only if you stay on the track.';
       }
       return;
     }
@@ -472,7 +474,7 @@ function startBurnMonitor(playlistId, headers, statusElement, openLinkEl, initia
     if (!res.ok) {
       openLinkEl.hidden = false;
       statusElement.textContent =
-        'Open Spotify, start playing your Burnlist playlist on any device — we will remove each track after 20s or when you skip.';
+        'Open Spotify and play this Burnlist. Next removes a song immediately; ~20s only if you stay on the track.';
       return;
     }
 
@@ -509,7 +511,7 @@ function startBurnMonitor(playlistId, headers, statusElement, openLinkEl, initia
       idlePolls = 0;
       openLinkEl.hidden = false;
       statusElement.textContent =
-        'Play this playlist in Spotify (any device). Tracks disappear after 20 seconds or when you skip.';
+        'Play this playlist in Spotify. Next removes a song right away; ~20s if you do not skip.';
       return;
     }
 
@@ -538,7 +540,7 @@ function startBurnMonitor(playlistId, headers, statusElement, openLinkEl, initia
         }
       } else {
         statusElement.textContent =
-          'Open Spotify, start playing your Burnlist playlist on any device — we will remove each track after 20s or when you skip.';
+          'Open Spotify and play this Burnlist. Next removes a song immediately; ~20s only if you stay on the track.';
       }
       return;
     }
@@ -556,11 +558,12 @@ function startBurnMonitor(playlistId, headers, statusElement, openLinkEl, initia
     }
 
     if (currentUri !== lastTrackUri) {
+      // Next / previous / auto-advance: always remove the track we left, at any listen length (no 20s rule).
       if (!burnedUris.has(lastTrackUri)) {
         const ok = await removeTrackFromPlaylist(playlistId, lastTrackUri, headers);
         if (ok) {
           burnedUris.add(lastTrackUri);
-          statusElement.textContent = 'Skipped — track removed from playlist.';
+          statusElement.textContent = 'Next — track removed (any listen length).';
           await afterSuccessfulTrackRemoval();
         }
       }
@@ -569,11 +572,12 @@ function startBurnMonitor(playlistId, headers, statusElement, openLinkEl, initia
       return;
     }
 
+    // Same track, no skip: burn after ~20s of playback.
     if (!burnedUris.has(currentUri) && progress >= BURN_MS) {
       const ok = await removeTrackFromPlaylist(playlistId, currentUri, headers);
       if (ok) {
         burnedUris.add(currentUri);
-        statusElement.textContent = '20s played — track removed from playlist.';
+        statusElement.textContent = '~20s on this track — removed from playlist.';
         await afterSuccessfulTrackRemoval();
       }
     }
@@ -709,7 +713,8 @@ async function runAfterAuth(accessToken) {
     },
     body: JSON.stringify({
       name: `Burnlist — ${moodLabel(mood)} 🔥`,
-      description: 'Public Burnlist: tracks remove after ~20s or skip; when the last track is gone the playlist is removed from your library.',
+      description:
+        'Public Burnlist: Next removes a song immediately; ~20s if you stay on the track. Empty list unfollows.',
       public: true,
       collaborative: false
     })
@@ -764,7 +769,7 @@ async function runAfterAuth(accessToken) {
   openLink.hidden = false;
   burnPanel.hidden = false;
 
-  statusElement.innerHTML = `Playlist ready${countNote}. <strong>Open Spotify</strong> and play it — each song leaves the list after 20 seconds or when you skip.`;
+  statusElement.innerHTML = `Playlist ready${countNote}. <strong>Open Spotify</strong> — <strong>Next</strong> removes a song right away; <strong>~20s</strong> on a song only if you don’t skip.`;
 
   startBurnMonitor(playlist.id, headers, statusElement, openLink, playlistTrackCount);
 }
