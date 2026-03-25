@@ -2,7 +2,7 @@ const CLIENT_ID = '1b922a6cb85549db80f560b7254c1116';
 const REDIRECT_URI = 'https://vinisha231.github.io/Burnlist/';
 // Playback state needed to remove tracks after ~20s listen or on skip
 const SCOPES =
-  'playlist-modify-public playlist-read-private user-library-read user-read-playback-state';
+  'playlist-modify-public playlist-read-private playlist-read-collaborative user-library-read user-read-playback-state';
 
 function generateCodeVerifier(length = 128) {
   const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';

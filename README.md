@@ -8,7 +8,7 @@ A small web app that builds a **mood-based Spotify playlist** from your **liked 
 
 1. Pick a **feeling** (happy, sad, angry, chill, love, hype, feelings) or **theme** (Hip Hop, R&B, J-Pop) and how many **songs** you want (1–50).
 2. **Log in with Spotify** (OAuth with PKCE).
-3. The app scans your **liked tracks** in a **random order** each run (shuffled pages and songs per page). A track matches if the **primary artist’s genres** fit the chosen vibe **or** if **any** credited artist is on a small **curated list** for that theme (e.g. R&B includes artists like Don Toliver and EsDeeKid when they appear on the track). Then it **shuffles** the final pick. It creates a **public, non-collaborative** playlist. Spotify does not offer a Web API to “pin” a playlist to your profile; **public** playlists can appear under **Public playlists** on your profile if your [Spotify privacy settings](https://www.spotify.com/account/privacy/) allow that.
+3. The app builds a pool from your **liked songs** plus tracks from **playlists you own** (public or private). If you own **at least three** playlists, it uses the **first three** in Spotify’s list order (library order); otherwise it uses **every** playlist you own. It **dedupes** by track, **shuffles**, then matches **mood/theme** if the **primary artist’s genres** fit **or** if **any** credited artist is on a small **curated list** (e.g. R&B → Don Toliver, EsDeeKid). New Burnlists are **public** and **non-collaborative** by default. Spotify does not offer a Web API to “pin” a playlist to your profile; **public** playlists can appear under **Public playlists** if your [Spotify privacy settings](https://www.spotify.com/account/privacy/) allow that.
 4. **Open the playlist in Spotify** and play it from any device.
 5. **Keep the Burnlist tab open** in your browser: it polls Spotify’s playback API. While this playlist is playing:
    - after **~20 seconds** on a track, that track is **removed** from the playlist;
@@ -41,7 +41,7 @@ You can also **remove that like** in Spotify so it won’t be chosen again.
 - Add a **Redirect URI** that matches `REDIRECT_URI` in `auth.js` (GitHub Pages uses `https://vinisha231.github.io/Burnlist/`).
 - Put your **Client ID** in `auth.js` as `CLIENT_ID`.
 
-Scopes used: playlist modification, library read, private playlist read, and **playback state** (to know position and skips).
+Scopes used: playlist modification, library read, private and collaborative playlist read (to read tracks from playlists you own), and **playback state** (position and skips).
 
 ## Run locally
 

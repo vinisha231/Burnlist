@@ -12,8 +12,6 @@ function clampSongCount(value) {
   return Math.min(SONG_MAX, Math.max(SONG_MIN, n));
 }
 
-const SAVED_PAGE_SIZE = 50;
-
 function randomBelow(n) {
   if (n <= 0) return 0;
   const buf = new Uint32Array(1);
@@ -29,23 +27,80 @@ function shuffleInPlace(arr) {
   return arr;
 }
 
-/** Random order of API offsets so each Burnlist run picks different songs for the same mood. */
-function shuffledSavedTrackOffsets(totalLikes) {
-  const offsets = [];
-  for (let o = 0; o < totalLikes; o += SAVED_PAGE_SIZE) {
-    offsets.push(o);
+/** All saved tracks (liked songs). */
+async function fetchAllSavedTracks(headers) {
+  const out = [];
+  let offset = 0;
+  while (true) {
+    const res = await fetch(
+      `https://api.spotify.com/v1/me/tracks?limit=50&offset=${offset}&market=from_token`,
+      { headers }
+    );
+    if (!res.ok) return out;
+    const data = await res.json();
+    if (!data.items?.length) break;
+    for (const item of data.items) {
+      if (item.track) out.push(item.track);
+    }
+    offset += 50;
   }
-  return shuffleInPlace(offsets);
+  return out;
 }
 
-async function getSavedTracksTotal(headers) {
-  const res = await fetch(
-    `https://api.spotify.com/v1/me/tracks?limit=1&offset=0&market=from_token`,
-    { headers }
-  );
-  if (!res.ok) return 0;
-  const data = await res.json();
-  return typeof data.total === 'number' ? data.total : 0;
+/** Playlists owned by the user (public or private). Order follows Spotify’s /me/playlists response. */
+async function fetchOwnedPlaylistRecords(headers, userId) {
+  const out = [];
+  let url = 'https://api.spotify.com/v1/me/playlists?limit=50';
+  while (url) {
+    const res = await fetch(url, { headers });
+    if (!res.ok) break;
+    const data = await res.json();
+    for (const p of data.items || []) {
+      if (p?.owner?.id === userId && p.id) out.push(p);
+    }
+    url = data.next || null;
+  }
+  return out;
+}
+
+/**
+ * If the user owns 3+ playlists, use the first 3 in API order (library order).
+ * Otherwise use every playlist they own.
+ */
+function pickPlaylistIdsForTracks(ownedRecords) {
+  if (ownedRecords.length === 0) return [];
+  if (ownedRecords.length >= 3) return ownedRecords.slice(0, 3).map((p) => p.id);
+  return ownedRecords.map((p) => p.id);
+}
+
+/** All tracks in a playlist (paginated). Skips episodes and local files. */
+async function fetchAllTracksForPlaylist(playlistId, headers) {
+  const out = [];
+  let url = `https://api.spotify.com/v1/playlists/${playlistId}/tracks?limit=100&market=from_token`;
+  while (url) {
+    const res = await fetch(url, { headers });
+    if (!res.ok) break;
+    const data = await res.json();
+    for (const row of data.items || []) {
+      const t = row.track;
+      if (!t || t.type !== 'track' || t.is_local) continue;
+      out.push(t);
+    }
+    url = data.next || null;
+  }
+  return out;
+}
+
+function dedupeTracksByUri(tracks) {
+  const seen = new Set();
+  const out = [];
+  for (const t of tracks) {
+    if (!t?.uri || t.type !== 'track') continue;
+    if (seen.has(t.uri)) continue;
+    seen.add(t.uri);
+    out.push(t);
+  }
+  return out;
 }
 
 /** Spotify does not expose “blocked artists” in the Web API; users can set IDs in localStorage (see README). */
@@ -537,7 +592,7 @@ async function runAfterAuth(accessToken) {
   const burnPanel = document.getElementById('burn-panel');
   const openLink = document.getElementById('open-playlist-link');
 
-  statusElement.textContent = '🎧 Logged in! Scanning your likes…';
+  statusElement.textContent = '🎧 Logged in! Loading your library…';
 
   const headers = { Authorization: 'Bearer ' + accessToken };
   const mood = localStorage.getItem('selectedMood') || 'chill';
@@ -555,36 +610,37 @@ async function runAfterAuth(accessToken) {
   const pickedUris = new Set();
 
   try {
-    const totalLikes = await getSavedTracksTotal(headers);
-    if (totalLikes === 0) {
-      statusElement.textContent = 'No liked songs in your library.';
+    statusElement.textContent = 'Loading liked songs…';
+    const likedTracks = await fetchAllSavedTracks(headers);
+
+    statusElement.textContent = 'Loading playlists you own…';
+    const ownedPlaylistRecords = await fetchOwnedPlaylistRecords(headers, userId);
+    const playlistIds = pickPlaylistIdsForTracks(ownedPlaylistRecords);
+
+    const playlistTracks = [];
+    for (let p = 0; p < playlistIds.length; p++) {
+      statusElement.textContent = `Loading tracks from your playlists (${p + 1}/${playlistIds.length})…`;
+      playlistTracks.push(...(await fetchAllTracksForPlaylist(playlistIds[p], headers)));
+    }
+
+    const pool = dedupeTracksByUri([...likedTracks, ...playlistTracks]);
+    shuffleInPlace(pool);
+
+    if (!pool.length) {
+      statusElement.textContent =
+        'No tracks found. Like some songs or add music to playlists you own, then try again.';
       return;
     }
 
-    const pageOffsets = shuffledSavedTrackOffsets(totalLikes);
     const blockedArtistIds = getBlockedArtistIdsFromStorage();
     const vibeIds = moodVibeArtists[mood] || [];
 
-    for (const offset of pageOffsets) {
-      if (selectedUris.length >= targetCount) break;
-
-      const res = await fetch(
-        `https://api.spotify.com/v1/me/tracks?limit=${SAVED_PAGE_SIZE}&offset=${offset}&market=from_token`,
-        { headers }
-      );
-      if (!res.ok) {
-        statusElement.textContent = `Could not load liked songs (${res.status}). Try again.`;
-        return;
-      }
-      const data = await res.json();
-      if (!data.items?.length) continue;
-
-      const tracks = shuffleInPlace(data.items.map((item) => item.track).filter(Boolean));
-      const artistIds = tracks.map((t) => t.artists[0]?.id).filter(Boolean);
-
+    for (let i = 0; i < pool.length && selectedUris.length < targetCount; i += 50) {
+      const chunk = pool.slice(i, i + 50);
+      const artistIds = chunk.map((t) => t.artists[0]?.id).filter(Boolean);
       const artistMap = await fetchArtistMap(artistIds, headers);
 
-      for (const track of tracks) {
+      for (const track of chunk) {
         if (!isLikelyPlayableTrack(track)) continue;
         if (trackTouchesBlockedArtist(track, blockedArtistIds)) continue;
         if (pickedUris.has(track.uri)) continue;
@@ -612,7 +668,7 @@ async function runAfterAuth(accessToken) {
         }
       }
 
-      statusElement.textContent = `Scanning your likes… (${selectedUris.length}/${targetCount} matches)`;
+      statusElement.textContent = `Matching mood… (${selectedUris.length}/${targetCount})`;
     }
   } catch (e) {
     console.error(e);
@@ -622,7 +678,8 @@ async function runAfterAuth(accessToken) {
   }
 
   if (!selectedUris.length) {
-    statusElement.textContent = 'No liked songs matched this mood. Like more tracks or pick another mood.';
+    statusElement.textContent =
+      'Nothing in your likes or playlists matched this mood. Try another mood or add more variety to your library.';
     return;
   }
 

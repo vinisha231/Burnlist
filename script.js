@@ -1,6 +1,7 @@
 import { redirectToSpotifyAuth } from './auth.js';
 
-const SCOPES = 'playlist-modify-public playlist-read-private user-library-read';
+const SCOPES =
+  'playlist-modify-public playlist-read-private playlist-read-collaborative user-library-read user-read-playback-state';
 
 const moodGenres = {
   happy: ['pop', 'dance', 'funk', 'party'],
