@@ -1,6 +1,6 @@
 # Burnlist
 
-A small web app that builds a **mood-based Spotify playlist** from your **liked songs**, then **removes each track** when you **Next** (or previous / auto-advance) — **immediately**, no minimum listen time — or after **~20 seconds** on the **same** track if you **don’t** skip. After the **last** track is removed, the app **unfollows** the whole playlist (Spotify’s equivalent of deleting it from your library).
+A small web app that builds a **mood-based Spotify playlist** from your **liked songs**, then **removes each track** when you **Next** (or previous / auto-advance) — **immediately**, no minimum listen time or after **~20 seconds** on the **same** track if you **don’t** skip. After the **last** track is removed, the app **unfollows** the whole playlist (Spotify’s equivalent of deleting it from your library).
 
 **Live site:** [https://vinisha231.github.io/Burnlist/](https://vinisha231.github.io/Burnlist/)
 
