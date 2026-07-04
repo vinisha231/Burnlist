@@ -28,7 +28,7 @@ export async function redirectToSpotifyAuth() {
   const codeVerifier = generateCodeVerifier();
   const codeChallenge = await generateCodeChallenge(codeVerifier);
 
-  localStorage.setItem('code_verifier', codeVerifier);
+  sessionStorage.setItem('code_verifier', codeVerifier);
 
   const args = new URLSearchParams({
     response_type: 'code',
@@ -46,7 +46,7 @@ export async function getAccessTokenFromCode() {
   const code = new URLSearchParams(window.location.search).get('code');
   if (!code) return null;
 
-  const codeVerifier = localStorage.getItem('code_verifier');
+  const codeVerifier = sessionStorage.getItem('code_verifier');
 
   const body = new URLSearchParams({
     grant_type: 'authorization_code',
@@ -64,7 +64,7 @@ export async function getAccessTokenFromCode() {
 
   const data = await res.json();
   if (data.access_token) {
-    localStorage.removeItem('code_verifier');
+    sessionStorage.removeItem('code_verifier');
   }
   return data.access_token ?? null;
 }
