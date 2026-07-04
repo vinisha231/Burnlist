@@ -5,10 +5,14 @@ const SCOPES =
   'playlist-modify-public playlist-read-private playlist-read-collaborative user-library-read user-read-playback-state';
 
 function generateCodeVerifier(length = 128) {
-  const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  // The PKCE code verifier is a security secret and must be unpredictable, so
+  // it needs a CSPRNG — Math.random() is not cryptographically secure. The
+  // 64-char set divides 256 evenly, so `& 63` maps random bytes without bias.
+  const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+  const bytes = crypto.getRandomValues(new Uint8Array(length));
   let verifier = '';
   for (let i = 0; i < length; i++) {
-    verifier += possible.charAt(Math.floor(Math.random() * possible.length));
+    verifier += possible[bytes[i] & 63];
   }
   return verifier;
 }
