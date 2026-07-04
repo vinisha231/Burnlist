@@ -761,9 +761,6 @@ async function runAfterAuth(accessToken) {
     })
   }).catch(() => {});
 
-  localStorage.setItem('burnlist_id', playlist.id);
-  localStorage.setItem('burnlist_token', accessToken);
-
   const webUrl = playlist.external_urls?.spotify || `https://open.spotify.com/playlist/${playlist.id}`;
   openLink.href = webUrl;
   openLink.hidden = false;
